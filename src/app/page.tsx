@@ -1,9 +1,16 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef, createContext, useContext } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect, createContext, useContext } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Map, { Marker } from "react-map-gl/mapbox";
 import type { MapRef } from "react-map-gl/mapbox";
+import {
+  getOnlinePartners,
+  createSosRequest,
+  subscribeSosRequest,
+  type SupabasePartner,
+  type SupabaseSosRequest,
+} from "@/lib/supabase";
 import {
   KeyRound,
   Truck,
@@ -1056,6 +1063,32 @@ export default function HomePage() {
 
   const toggleTheme = useCallback(() => setDark((d) => !d), []);
 
+  /* ---- Supabase: reální partneři z DB ---- */
+  const [realPartners, setRealPartners] = useState<SupabasePartner[]>([]);
+  const [activeSosRequest, setActiveSosRequest] = useState<SupabaseSosRequest | null>(null);
+
+  useEffect(() => {
+    // Načti online partnery při mountu
+    getOnlinePartners().then(setRealPartners);
+    // Refresh každých 30s
+    const interval = setInterval(() => {
+      getOnlinePartners().then(setRealPartners);
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Realtime sledování SOS requestu
+  useEffect(() => {
+    if (!activeSosRequest) return;
+    const unsubscribe = subscribeSosRequest(activeSosRequest.id, (updated) => {
+      setActiveSosRequest(updated);
+      if (updated.status === "accepted" || updated.status === "in_progress") {
+        setState("found");
+      }
+    });
+    return unsubscribe;
+  }, [activeSosRequest?.id]);
+
   /* ---- Derived map config ---- */
   const mapConfig = useMemo(() => ({
     style: dark ? MAP_STYLE_CONFIG[mapStyle].urlDark : MAP_STYLE_CONFIG[mapStyle].urlLight,
@@ -1120,10 +1153,33 @@ export default function HomePage() {
   }, []);
 
   /* ---- Handlers ---- */
-  const handleSOS = useCallback(() => {
+  const handleSOS = useCallback(async () => {
     if (!selected) return;
     setState("searching");
-    setTimeout(() => setState("found"), 3000);
+
+    // Odešli reálný SOS request do Supabase
+    const request = await createSosRequest({
+      kategorie: selected.id,
+      popis: `SOS ${selected.label} — zákazník potřebuje pomoc`,
+      lat: CUSTOMER_COORDS.latitude,
+      lng: CUSTOMER_COORDS.longitude,
+      adresa: "Praha, centrum",
+    });
+
+    if (request) {
+      setActiveSosRequest(request);
+      // Partnerská appka teď vidí tento request v reálném čase!
+      // Pokud žádný partner nepřijme do 15s, přepni na "found" s mock daty
+      setTimeout(() => {
+        setState((prev) => {
+          if (prev === "searching") return "found";
+          return prev;
+        });
+      }, 15000);
+    } else {
+      // Fallback: pokud Supabase insert selže (RLS), použij mock
+      setTimeout(() => setState("found"), 3000);
+    }
   }, [selected]);
 
   const handleReset = useCallback(() => {
@@ -1368,6 +1424,46 @@ export default function HomePage() {
                         <span className="text-[9px] font-bold text-white whitespace-nowrap">{svc.name}</span>
                       </motion.div>
                     )}
+                  </motion.div>
+                </Marker>
+              );
+            })}
+
+            {/* Real partners from Supabase DB (zelené piny) */}
+            {realPartners.map((partner) => {
+              if (!partner.lat || !partner.lng) return null;
+              // Ikona podle kategorie
+              const iconMap: Record<string, React.ElementType> = {
+                zamecnik: KeyRound,
+                odtahovka: Truck,
+                servis: Wrench,
+                instalater: Droplets,
+              };
+              const PartnerIcon = iconMap[partner.kategorie] || MapPin;
+              const isFiltered = selected && partner.kategorie !== selected.id;
+              if (isFiltered) return null;
+              return (
+                <Marker
+                  key={`real-${partner.id}`}
+                  latitude={partner.lat}
+                  longitude={partner.lng}
+                  anchor="bottom"
+                >
+                  <motion.div
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                    className="flex flex-col items-center cursor-pointer"
+                  >
+                    <div className="flex items-center justify-center w-9 h-9 rounded-full shadow-lg ring-2 ring-emerald-400/50 bg-emerald-500 shadow-emerald-500/40">
+                      <PartnerIcon className="w-4 h-4 text-white" strokeWidth={2.2} />
+                    </div>
+                    <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-emerald-400/50 -mt-[1px]" />
+                    <div className="mt-0.5 px-1.5 py-0.5 rounded-md bg-emerald-600/90 backdrop-blur-sm">
+                      <span className="text-[8px] font-bold text-white whitespace-nowrap">
+                        ● {partner.jmeno}{partner.firma ? ` · ${partner.firma}` : ""}
+                      </span>
+                    </div>
                   </motion.div>
                 </Marker>
               );
