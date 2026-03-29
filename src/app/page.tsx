@@ -1008,10 +1008,12 @@ function PinTooltip({
   service,
   onDetail,
   onClose,
+  onMessage,
 }: {
   service: ServiceProvider;
   onDetail: () => void;
   onClose: () => void;
+  onMessage?: () => void;
 }) {
   const { dark } = useTheme();
   const Icon = service.icon;
@@ -1061,6 +1063,17 @@ function PinTooltip({
             <span className={cn("text-[10px] font-bold", dark ? "text-white" : "text-gray-900")}>{service.phone.slice(-9)}</span>
           </div>
         </div>
+
+        {onMessage && (
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={onMessage}
+            className="w-full flex items-center justify-center gap-2 py-2.5 mb-2 rounded-xl bg-blue-500/90 hover:bg-blue-600/90 text-white font-semibold text-xs transition-colors shadow-lg"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            <span>Napsat zprávu</span>
+          </motion.button>
+        )}
 
         <div className="flex gap-2">
           <motion.button
@@ -1366,18 +1379,53 @@ export default function HomePage() {
   }, [mapConfig.pitch]);
 
   /* ---- Fly to real DB partner on map ---- */
+  const partnerToService = useCallback((partner: SupabasePartner): ServiceProvider | null => {
+    if (!partner.lat || !partner.lng) return null;
+    const iconMap: Record<string, React.ElementType> = {
+      zamecnik: KeyRound, odtahovka: Truck, servis: Wrench, instalater: Droplets,
+    };
+    const colorMap: Record<string, { pinBg: string; pinRing: string; pinShadow: string }> = {
+      zamecnik:  { pinBg: "bg-amber-500",  pinRing: "ring-amber-400/50",  pinShadow: "shadow-amber-500/40" },
+      odtahovka: { pinBg: "bg-blue-500",   pinRing: "ring-blue-400/50",   pinShadow: "shadow-blue-500/40" },
+      servis:    { pinBg: "bg-purple-500",  pinRing: "ring-purple-400/50", pinShadow: "shadow-purple-500/40" },
+      instalater:{ pinBg: "bg-cyan-500",    pinRing: "ring-cyan-400/50",   pinShadow: "shadow-cyan-500/40" },
+    };
+    const colors = colorMap[partner.kategorie] ?? { pinBg: "bg-emerald-500", pinRing: "ring-emerald-400/50", pinShadow: "shadow-emerald-500/40" };
+    return {
+      id: partner.id,
+      name: partner.firma || partner.jmeno,
+      profession: partner.kategorie.charAt(0).toUpperCase() + partner.kategorie.slice(1),
+      professionId: partner.kategorie,
+      rating: 4.5 + Math.random() * 0.5,
+      reviewCount: Math.floor(20 + Math.random() * 80),
+      lat: partner.lat,
+      lng: partner.lng,
+      pinColor: "text-white",
+      ...colors,
+      icon: iconMap[partner.kategorie] || MapPin,
+      eta: "~15 min",
+      price: "Dle ceníku",
+      phone: partner.telefon || "+420 000 000 000",
+      website: "#",
+      address: partner.adresa || "Neznámá adresa",
+      description: `${partner.jmeno}${partner.firma ? ` — ${partner.firma}` : ""}`,
+      reviews: [],
+    };
+  }, []);
+
   const flyToPartner = useCallback((partner: SupabasePartner) => {
     if (!partner.lat || !partner.lng) return;
     setSearchQuery("");
     setSearchFocused(false);
-    setTooltipService(null);
+    const svc = partnerToService(partner);
+    setTooltipService(svc);
     mapRef.current?.flyTo({
       center: [partner.lng, partner.lat],
       zoom: 16,
       pitch: mapConfig.pitch,
       duration: 1500,
     });
-  }, [mapConfig.pitch]);
+  }, [mapConfig.pitch, partnerToService]);
 
   /* ---- Change map style (provoz / satelit / prohlídka) ---- */
   const handleStyleChange = useCallback((style: MapStyle) => {
@@ -1723,6 +1771,19 @@ export default function HomePage() {
                   latitude={partner.lat}
                   longitude={partner.lng}
                   anchor="bottom"
+                  onClick={(e) => {
+                    e.originalEvent.stopPropagation();
+                    const svc = partnerToService(partner);
+                    if (svc) {
+                      setTooltipService(svc);
+                      mapRef.current?.flyTo({
+                        center: [partner.lng!, partner.lat!],
+                        zoom: 15.5,
+                        pitch: mapConfig.pitch,
+                        duration: 800,
+                      });
+                    }
+                  }}
                 >
                   <motion.div
                     initial={{ scale: 0, opacity: 0 }}
@@ -1801,11 +1862,15 @@ export default function HomePage() {
 
           {/* ---- Pin Tooltip Card (above bottom SOS panel) ---- */}
           <AnimatePresence>
-            {tooltipService && !activePanel && state !== "searching" && state !== "found" && (
+            {tooltipService && !activePanel && state !== "searching" && (
               <PinTooltip
                 service={tooltipService}
                 onDetail={() => openServiceDetail(tooltipService)}
                 onClose={() => setTooltipService(null)}
+                onMessage={() => {
+                  setTooltipService(null);
+                  setActivePanel("chat");
+                }}
               />
             )}
           </AnimatePresence>
