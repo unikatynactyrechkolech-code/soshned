@@ -1867,10 +1867,10 @@ export default function HomePage() {
                 service={tooltipService}
                 onDetail={() => openServiceDetail(tooltipService)}
                 onClose={() => setTooltipService(null)}
-                onMessage={() => {
+                onMessage={activeSosRequest ? () => {
                   setTooltipService(null);
                   setActivePanel("chat");
-                }}
+                } : undefined}
               />
             )}
           </AnimatePresence>
