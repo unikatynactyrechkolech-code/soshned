@@ -1304,7 +1304,18 @@ export default function HomePage() {
 
   /* ---- Send chat message (customer) ---- */
   const handleSendMessage = useCallback(async () => {
-    if (!chatInput.trim() || !activeSosRequest) return;
+    if (!chatInput.trim()) return;
+    if (!activeSosRequest) {
+      // Bez aktivního SOS — přidáme lokální zprávu jako info
+      setChatMessages((prev) => [...prev, {
+        id: `info-${Date.now()}`,
+        sos_request_id: 'none',
+        sender_type: 'system' as 'customer',
+        text: '⚠️ Pro odesílání zpráv nejprve přivolejte službu tlačítkem SOS.',
+        created_at: new Date().toISOString(),
+      } as SupabaseMessage]);
+      return;
+    }
     const text = chatInput.trim();
     setChatInput("");
     await sendMessage({
@@ -1868,10 +1879,6 @@ export default function HomePage() {
                 onDetail={() => openServiceDetail(tooltipService)}
                 onClose={() => setTooltipService(null)}
                 onMessage={() => {
-                  if (!activeSosRequest) {
-                    alert('Nejprve přivolejte službu tlačítkem SOS, pak můžete psát zprávy.');
-                    return;
-                  }
                   setTooltipService(null);
                   setActivePanel("chat");
                 }}
