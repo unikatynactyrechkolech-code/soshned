@@ -9,8 +9,12 @@ import {
   getAllPartnersWithLocation,
   createSosRequest,
   subscribeSosRequest,
+  sendMessage,
+  getMessages,
+  subscribeMessages,
   type SupabasePartner,
   type SupabaseSosRequest,
+  type SupabaseMessage,
 } from "@/lib/supabase";
 import {
   KeyRound,
@@ -48,6 +52,8 @@ import {
   Navigation,
   Moon,
   Sun,
+  Send,
+  Crosshair,
 } from "lucide-react";
 import clsx from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -111,8 +117,8 @@ type ServiceProvider = {
   reviews: { author: string; text: string; rating: number; date: string }[];
 };
 
-type AppState = "idle" | "selected" | "searching" | "found";
-type Panel = null | "menu" | "profile" | "service" | "contact" | "about";
+type AppState = "idle" | "selected" | "placing_pin" | "searching" | "found" | "chat";
+type Panel = null | "menu" | "profile" | "service" | "contact" | "about" | "chat";
 
 type MapStyle = "provoz" | "satelit" | "prohlidka";
 
@@ -665,6 +671,105 @@ function AboutPanel({ onClose }: { onClose: () => void }) {
 }
 
 /* ================================================================== */
+/*  CHAT PANEL                                                        */
+/* ================================================================== */
+function ChatPanel({
+  messages,
+  chatInput,
+  setChatInput,
+  onSend,
+  chatEndRef,
+  onClose,
+}: {
+  messages: SupabaseMessage[];
+  chatInput: string;
+  setChatInput: (v: string) => void;
+  onSend: () => void;
+  chatEndRef: React.RefObject<HTMLDivElement | null>;
+  onClose: () => void;
+}) {
+  const { dark } = useTheme();
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className={cn("flex items-center gap-3 px-5 pt-[max(env(safe-area-inset-top),16px)] pb-4 border-b", dark ? "border-white/[0.06]" : "border-gray-200")}>
+        <motion.button whileTap={{ scale: 0.9 }} onClick={onClose} className={cn("flex items-center justify-center w-9 h-9 rounded-xl", dark ? "bg-white/[0.06]" : "bg-gray-100")}>
+          <ArrowLeft className={cn("w-4 h-4", dark ? "text-white/60" : "text-gray-500")} />
+        </motion.button>
+        <div className="flex-1 min-w-0">
+          <h2 className={cn("text-lg font-bold", dark ? "text-white" : "text-gray-900")}>Chat s technikem</h2>
+          <p className={cn("text-[10px]", dark ? "text-white/30" : "text-gray-400")}>Zprávy v reálném čase</p>
+        </div>
+        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full gap-3 opacity-40">
+            <MessageCircle className={cn("w-10 h-10", dark ? "text-white/20" : "text-gray-300")} />
+            <p className={cn("text-xs", dark ? "text-white/30" : "text-gray-400")}>Zatím žádné zprávy</p>
+          </div>
+        )}
+        {messages.map((msg) => {
+          const isMe = msg.sender_type === "customer";
+          return (
+            <div key={msg.id} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
+              <div
+                className={cn(
+                  "max-w-[80%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed",
+                  isMe
+                    ? "bg-blue-500 text-white rounded-br-md"
+                    : dark
+                      ? "bg-white/[0.08] text-white/80 rounded-bl-md ring-1 ring-white/[0.06]"
+                      : "bg-gray-100 text-gray-800 rounded-bl-md ring-1 ring-gray-200"
+                )}
+              >
+                <p>{msg.text}</p>
+                <p className={cn("text-[9px] mt-1", isMe ? "text-white/50" : dark ? "text-white/20" : "text-gray-400")}>
+                  {new Date(msg.created_at).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+        <div ref={chatEndRef} />
+      </div>
+
+      {/* Input */}
+      <div className={cn("px-4 py-3 border-t", dark ? "border-white/[0.06]" : "border-gray-200")}>
+        <div className={cn("flex items-center gap-2 p-1 rounded-2xl ring-1", dark ? "bg-white/[0.04] ring-white/[0.08]" : "bg-gray-50 ring-gray-200")}>
+          <input
+            type="text"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
+            placeholder="Napište zprávu…"
+            className={cn(
+              "flex-1 bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-gray-400",
+              dark ? "text-white" : "text-gray-900"
+            )}
+          />
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={onSend}
+            disabled={!chatInput.trim()}
+            className={cn(
+              "flex items-center justify-center w-10 h-10 rounded-xl transition-colors",
+              chatInput.trim()
+                ? "bg-blue-500 hover:bg-blue-600 text-white shadow-lg"
+                : dark ? "bg-white/[0.05] text-white/20" : "bg-gray-100 text-gray-300"
+            )}
+          >
+            <Send className="w-4 h-4" />
+          </motion.button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ================================================================== */
 /*  SERVICE DETAIL PANEL                                              */
 /* ================================================================== */
 function ServiceDetailPanel({ service, onClose }: { service: ServiceProvider | null; onClose: () => void }) {
@@ -1116,6 +1221,7 @@ function SearchResults({
 
 export default function HomePage() {
   const mapRef = useRef<MapRef>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const [selected, setSelected] = useState<Profession | null>(null);
   const [state, setState] = useState<AppState>("idle");
   const [searchQuery, setSearchQuery] = useState("");
@@ -1126,6 +1232,14 @@ export default function HomePage() {
   const [mapStyle, setMapStyle] = useState<MapStyle>("satelit");
   const [is3D, setIs3D] = useState(true);
   const [dark, setDark] = useState(false);
+
+  /* ---- Customer pin (kliknutí na mapu) ---- */
+  const [customerCoords, setCustomerCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [placingPin, setPlacingPin] = useState(false);
+
+  /* ---- Chat ---- */
+  const [chatMessages, setChatMessages] = useState<SupabaseMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
 
   const toggleTheme = useCallback(() => setDark((d) => !d), []);
 
@@ -1154,6 +1268,38 @@ export default function HomePage() {
     });
     return unsubscribe;
   }, [activeSosRequest?.id]);
+
+  // Realtime chat zprávy
+  useEffect(() => {
+    if (!activeSosRequest) return;
+    // Načti existující zprávy
+    getMessages(activeSosRequest.id).then(setChatMessages);
+    // Poslouchej nové
+    const unsubscribe = subscribeMessages(activeSosRequest.id, (msg) => {
+      setChatMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
+    });
+    return unsubscribe;
+  }, [activeSosRequest?.id]);
+
+  // Auto-scroll chatu dolů
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages.length]);
+
+  /* ---- Send chat message (customer) ---- */
+  const handleSendMessage = useCallback(async () => {
+    if (!chatInput.trim() || !activeSosRequest) return;
+    const text = chatInput.trim();
+    setChatInput("");
+    await sendMessage({
+      sos_request_id: activeSosRequest.id,
+      sender_type: "customer",
+      text,
+    });
+  }, [chatInput, activeSosRequest]);
 
   /* ---- Derived map config ---- */
   const mapConfig = useMemo(() => ({
@@ -1249,20 +1395,21 @@ export default function HomePage() {
 
   /* ---- Handlers ---- */
   const handleSOS = useCallback(async () => {
-    if (!selected) return;
+    if (!selected || !customerCoords) return;
     setState("searching");
 
     // Odešli reálný SOS request do Supabase
     const request = await createSosRequest({
       kategorie: selected.id,
       popis: `SOS ${selected.label} — zákazník potřebuje pomoc`,
-      lat: CUSTOMER_COORDS.latitude,
-      lng: CUSTOMER_COORDS.longitude,
-      adresa: "Praha, centrum",
+      lat: customerCoords.latitude,
+      lng: customerCoords.longitude,
+      adresa: "Praha",
     });
 
     if (request) {
       setActiveSosRequest(request);
+      setChatMessages([]);
       // Partnerská appka teď vidí tento request v reálném čase!
       // Pokud žádný partner nepřijme do 15s, přepni na "found" s mock daty
       setTimeout(() => {
@@ -1275,21 +1422,33 @@ export default function HomePage() {
       // Fallback: pokud Supabase insert selže (RLS), použij mock
       setTimeout(() => setState("found"), 3000);
     }
-  }, [selected]);
+  }, [selected, customerCoords]);
 
   const handleReset = useCallback(() => {
     setState("idle");
     setSelected(null);
     setSearchQuery("");
     setTooltipService(null);
+    setActiveSosRequest(null);
+    setChatMessages([]);
+    setChatInput("");
+    setCustomerCoords(null);
+    setPlacingPin(false);
+    setActivePanel(null);
   }, []);
 
   const handleSelect = useCallback((p: Profession) => {
     setSelected(p);
-    setState("selected");
     setSearchQuery("");
     setTooltipService(null);
-  }, []);
+    if (!customerCoords) {
+      // Ještě nemá umístěný pin — nabídni umístění
+      setPlacingPin(true);
+      setState("placing_pin");
+    } else {
+      setState("selected");
+    }
+  }, [customerCoords]);
 
   const handlePinClick = useCallback((service: ServiceProvider) => {
     setTooltipService(service);
@@ -1468,16 +1627,31 @@ export default function HomePage() {
             logoPosition="bottom-left"
             interactive={true}
             dragRotate={is3D}
-            onClick={() => setTooltipService(null)}
+            onClick={(e) => {
+              if (placingPin && e.lngLat) {
+                setCustomerCoords({ latitude: e.lngLat.lat, longitude: e.lngLat.lng });
+                setPlacingPin(false);
+                setState("selected");
+                return;
+              }
+              setTooltipService(null);
+            }}
           >
-            {/* Customer Marker */}
-            <Marker {...CUSTOMER_COORDS} anchor="center">
-              <div className="relative flex items-center justify-center">
-                <span className="absolute w-7 h-7 rounded-full bg-blue-400/25 animate-pulse-ring-outer" />
-                <span className="absolute w-7 h-7 rounded-full bg-blue-400/35 animate-pulse-ring" />
-                <span className="relative w-4.5 h-4.5 rounded-full bg-blue-500 ring-[3px] ring-white/40 shadow-[0_0_24px_rgba(59,130,246,0.7)]" />
-              </div>
-            </Marker>
+            {/* Customer Marker (kliknutím umístěný) */}
+            {customerCoords && (
+              <Marker {...customerCoords} anchor="center">
+                <div className="relative flex flex-col items-center">
+                  <div className="relative flex items-center justify-center">
+                    <span className="absolute w-8 h-8 rounded-full bg-blue-400/25 animate-pulse-ring-outer" />
+                    <span className="absolute w-8 h-8 rounded-full bg-blue-400/35 animate-pulse-ring" />
+                    <span className="relative w-5 h-5 rounded-full bg-blue-500 ring-[3px] ring-white/40 shadow-[0_0_24px_rgba(59,130,246,0.7)]" />
+                  </div>
+                  <div className="mt-1 px-2 py-0.5 rounded-md bg-blue-600/90 backdrop-blur-sm">
+                    <span className="text-[8px] font-bold text-white whitespace-nowrap">📍 Jste zde</span>
+                  </div>
+                </div>
+              </Marker>
+            )}
 
             {/* Service Provider Pins */}
             {visibleServices.map((svc) => {
@@ -1651,6 +1825,37 @@ export default function HomePage() {
                   </motion.div>
                 )}
 
+                {/* STATE A2: Placing Pin */}
+                {state === "placing_pin" && selected && (
+                  <motion.div key="placing_pin" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 30 }} transition={{ duration: 0.3 }}>
+                    <div className={cn("p-4 rounded-3xl backdrop-blur-2xl ring-1 ring-blue-500/20", dark ? "bg-black/50" : "bg-white/80 shadow-lg")}>
+                      <div className="flex flex-col items-center gap-3">
+                        <motion.div
+                          animate={{ y: [0, -6, 0] }}
+                          transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                        >
+                          <Crosshair className="w-8 h-8 text-blue-400" />
+                        </motion.div>
+                        <div className="text-center">
+                          <p className={cn("text-sm font-bold", dark ? "text-white" : "text-gray-900")}>Klikněte na mapu pro označení vaší polohy</p>
+                          <p className={cn("text-xs mt-1", dark ? "text-white/40" : "text-gray-500")}>Vyberte místo, kde potřebujete pomoc</p>
+                        </div>
+                        <motion.button
+                          whileTap={{ scale: 0.97 }}
+                          onClick={handleReset}
+                          className={cn(
+                            "w-full flex items-center justify-center gap-2 py-3 rounded-xl ring-1 transition-colors",
+                            dark ? "bg-white/[0.05] ring-white/[0.1] hover:bg-white/[0.08]" : "bg-gray-100 ring-gray-200 hover:bg-gray-200"
+                          )}
+                        >
+                          <X className={cn("w-4 h-4", dark ? "text-white/40" : "text-gray-400")} />
+                          <span className={cn("text-xs font-semibold", dark ? "text-white/40" : "text-gray-500")}>Zrušit</span>
+                        </motion.button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
                 {/* STATE B: Selected */}
                 {state === "selected" && selected && (
                   <motion.div key="selected" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 30 }} transition={{ duration: 0.3 }}>
@@ -1735,17 +1940,27 @@ export default function HomePage() {
                       <div className="flex items-center justify-center gap-2 px-3 py-2 mb-3 rounded-xl bg-emerald-500/[0.08] ring-1 ring-emerald-500/20">
                         <span className="text-xs font-medium text-emerald-400/80">📍 Sledujte polohu na mapě v reálném čase</span>
                       </div>
-                      <motion.button
-                        whileTap={{ scale: 0.97 }}
-                        onClick={handleReset}
-                        className={cn(
-                          "w-full flex items-center justify-center gap-2 py-3 rounded-xl ring-1 transition-colors",
-                          dark ? "bg-white/[0.05] ring-white/[0.1] hover:bg-white/[0.08]" : "bg-gray-100 ring-gray-200 hover:bg-gray-200"
-                        )}
-                      >
-                        <X className={cn("w-4 h-4", dark ? "text-white/40" : "text-gray-400")} />
-                        <span className={cn("text-xs font-semibold", dark ? "text-white/40" : "text-gray-500")}>Zrušit výjezd / Zpět</span>
-                      </motion.button>
+                      <div className="flex gap-2">
+                        <motion.button
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => setActivePanel("chat")}
+                          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-500/90 hover:bg-blue-600/90 text-white font-semibold text-xs transition-colors shadow-lg"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          Napsat zprávu
+                        </motion.button>
+                        <motion.button
+                          whileTap={{ scale: 0.97 }}
+                          onClick={handleReset}
+                          className={cn(
+                            "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl ring-1 transition-colors",
+                            dark ? "bg-white/[0.05] ring-white/[0.1] hover:bg-white/[0.08]" : "bg-gray-100 ring-gray-200 hover:bg-gray-200"
+                          )}
+                        >
+                          <X className={cn("w-4 h-4", dark ? "text-white/40" : "text-gray-400")} />
+                          <span className={cn("text-xs font-semibold", dark ? "text-white/40" : "text-gray-500")}>Zrušit</span>
+                        </motion.button>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -1771,6 +1986,16 @@ export default function HomePage() {
         </SlidePanel>
         <SlidePanel isOpen={activePanel === "about"} onClose={closePanel} direction="left">
           <AboutPanel onClose={closePanel} />
+        </SlidePanel>
+        <SlidePanel isOpen={activePanel === "chat"} onClose={closePanel} direction="bottom">
+          <ChatPanel
+            messages={chatMessages}
+            chatInput={chatInput}
+            setChatInput={setChatInput}
+            onSend={handleSendMessage}
+            chatEndRef={chatEndRef}
+            onClose={closePanel}
+          />
         </SlidePanel>
       </div>
     </ThemeContext.Provider>

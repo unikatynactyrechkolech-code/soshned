@@ -129,3 +129,80 @@ export function subscribeSosRequest(
     supabase.removeChannel(channel);
   };
 }
+
+// ── Chat / Messages ─────────────────────────────────────────────────
+
+export type SupabaseMessage = {
+  id: string;
+  sos_request_id: string;
+  sender_type: "customer" | "partner";
+  sender_id: string | null;
+  text: string;
+  created_at: string;
+};
+
+/** Odešle zprávu do chatu */
+export async function sendMessage(params: {
+  sos_request_id: string;
+  sender_type: "customer" | "partner";
+  sender_id?: string;
+  text: string;
+}): Promise<SupabaseMessage | null> {
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({
+      sos_request_id: params.sos_request_id,
+      sender_type: params.sender_type,
+      sender_id: params.sender_id ?? null,
+      text: params.text,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Chyba při odesílání zprávy:", error);
+    return null;
+  }
+  return data;
+}
+
+/** Načte všechny zprávy k danému SOS requestu */
+export async function getMessages(sosRequestId: string): Promise<SupabaseMessage[]> {
+  const { data, error } = await supabase
+    .from("messages")
+    .select("*")
+    .eq("sos_request_id", sosRequestId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    console.error("Chyba při načítání zpráv:", error);
+    return [];
+  }
+  return data ?? [];
+}
+
+/** Realtime subscription na nové zprávy */
+export function subscribeMessages(
+  sosRequestId: string,
+  onNewMessage: (message: SupabaseMessage) => void
+) {
+  const channel = supabase
+    .channel(`messages-${sosRequestId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `sos_request_id=eq.${sosRequestId}`,
+      },
+      (payload) => {
+        onNewMessage(payload.new as SupabaseMessage);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
