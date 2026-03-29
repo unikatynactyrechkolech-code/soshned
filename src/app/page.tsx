@@ -6,6 +6,7 @@ import Map, { Marker } from "react-map-gl/mapbox";
 import type { MapRef } from "react-map-gl/mapbox";
 import {
   getOnlinePartners,
+  getAllPartnersWithLocation,
   createSosRequest,
   subscribeSosRequest,
   type SupabasePartner,
@@ -994,14 +995,33 @@ function PinTooltip({
 /*  SEARCH RESULTS DROPDOWN                                           */
 /* ================================================================== */
 function SearchResults({
-  results,
-  onSelect,
+  mockResults,
+  dbResults,
+  onSelectMock,
+  onSelectDb,
 }: {
-  results: ServiceProvider[];
-  onSelect: (s: ServiceProvider) => void;
+  mockResults: ServiceProvider[];
+  dbResults: SupabasePartner[];
+  onSelectMock: (s: ServiceProvider) => void;
+  onSelectDb: (p: SupabasePartner) => void;
 }) {
   const { dark } = useTheme();
-  if (results.length === 0) return null;
+  if (mockResults.length === 0 && dbResults.length === 0) return null;
+
+  const kategorieName: Record<string, string> = {
+    zamecnik: "Zámečník",
+    odtahovka: "Odtahovka",
+    servis: "Autoservis",
+    instalater: "Instalatér",
+    elektrikar: "Elektrikář",
+    sklenar: "Sklenář",
+    nahradni_dily: "Náhradní díly",
+    cisteni: "Čištění",
+    klimatizace: "Klimatizace",
+    pest_control: "Deratizace",
+    pneuservis: "Pneuservis",
+    vykup_aut: "Výkup aut",
+  };
 
   return (
     <motion.div
@@ -1009,37 +1029,83 @@ function SearchResults({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       className={cn(
-        "absolute top-full left-0 right-0 mt-1.5 z-50 max-h-[240px] overflow-y-auto rounded-2xl backdrop-blur-2xl ring-1 shadow-2xl hide-scrollbar",
+        "absolute top-full left-0 right-0 mt-1.5 z-50 max-h-[300px] overflow-y-auto rounded-2xl backdrop-blur-2xl ring-1 shadow-2xl hide-scrollbar",
         dark ? "bg-[#0f0f1a]/98 ring-white/[0.1]" : "bg-white/98 ring-black/[0.06] shadow-black/10"
       )}
     >
-      {results.map((s) => {
-        const SIcon = s.icon;
-        return (
-          <motion.button
-            key={s.id}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => onSelect(s)}
-            className={cn(
-              "w-full flex items-center gap-3 px-4 py-3 transition-colors border-b last:border-b-0",
-              dark ? "hover:bg-white/[0.05] border-white/[0.04]" : "hover:bg-gray-50 border-gray-100"
-            )}
-          >
-            <div className={cn("flex items-center justify-center w-8 h-8 rounded-lg ring-1", s.pinBg, s.pinRing)}>
-              <SIcon className="w-4 h-4 text-white" />
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <p className={cn("text-xs font-bold truncate", dark ? "text-white" : "text-gray-900")}>{s.name}</p>
-              <p className={cn("text-[10px]", dark ? "text-white/30" : "text-gray-500")}>{s.profession} · {s.address}</p>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-              <span className={cn("text-[10px] font-bold", dark ? "text-white/50" : "text-gray-500")}>{s.rating}</span>
-            </div>
-            <Navigation className="w-3.5 h-3.5 text-blue-400/60 shrink-0" />
-          </motion.button>
-        );
-      })}
+      {/* Reální partneři z DB */}
+      {dbResults.length > 0 && (
+        <>
+          <div className={cn("px-4 pt-3 pb-1.5", dark ? "text-white/25" : "text-gray-400")}>
+            <span className="text-[9px] font-bold uppercase tracking-wider">Partneři (sídla firem)</span>
+          </div>
+          {dbResults.map((p) => (
+            <motion.button
+              key={`db-${p.id}`}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => onSelectDb(p)}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 transition-colors border-b last:border-b-0",
+                dark ? "hover:bg-white/[0.05] border-white/[0.04]" : "hover:bg-gray-50 border-gray-100"
+              )}
+            >
+              <div className={cn("flex items-center justify-center w-8 h-8 rounded-lg ring-1", p.is_online ? "bg-emerald-500 ring-emerald-400/50" : "bg-gray-400 ring-gray-300/50")}>
+                <span className="text-xs font-bold text-white">{p.jmeno.charAt(0)}</span>
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <p className={cn("text-xs font-bold truncate", dark ? "text-white" : "text-gray-900")}>
+                  {p.jmeno}{p.firma ? ` · ${p.firma}` : ""}
+                </p>
+                <p className={cn("text-[10px]", dark ? "text-white/30" : "text-gray-500")}>
+                  {kategorieName[p.kategorie] ?? p.kategorie} · {p.adresa ?? "Praha"}
+                  {p.is_online ? " · 🟢" : " · ⚪"}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                <span className={cn("text-[10px] font-bold", dark ? "text-white/50" : "text-gray-500")}>{p.hodnoceni}</span>
+              </div>
+              <Navigation className="w-3.5 h-3.5 text-blue-400/60 shrink-0" />
+            </motion.button>
+          ))}
+        </>
+      )}
+
+      {/* Mock services */}
+      {mockResults.length > 0 && (
+        <>
+          <div className={cn("px-4 pt-3 pb-1.5", dark ? "text-white/25" : "text-gray-400")}>
+            <span className="text-[9px] font-bold uppercase tracking-wider">Doporučené služby</span>
+          </div>
+          {mockResults.map((s) => {
+            const SIcon = s.icon;
+            return (
+              <motion.button
+                key={s.id}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => onSelectMock(s)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-4 py-3 transition-colors border-b last:border-b-0",
+                  dark ? "hover:bg-white/[0.05] border-white/[0.04]" : "hover:bg-gray-50 border-gray-100"
+                )}
+              >
+                <div className={cn("flex items-center justify-center w-8 h-8 rounded-lg ring-1", s.pinBg, s.pinRing)}>
+                  <SIcon className="w-4 h-4 text-white" />
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className={cn("text-xs font-bold truncate", dark ? "text-white" : "text-gray-900")}>{s.name}</p>
+                  <p className={cn("text-[10px]", dark ? "text-white/30" : "text-gray-500")}>{s.profession} · {s.address}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                  <span className={cn("text-[10px] font-bold", dark ? "text-white/50" : "text-gray-500")}>{s.rating}</span>
+                </div>
+                <Navigation className="w-3.5 h-3.5 text-blue-400/60 shrink-0" />
+              </motion.button>
+            );
+          })}
+        </>
+      )}
     </motion.div>
   );
 }
@@ -1068,11 +1134,11 @@ export default function HomePage() {
   const [activeSosRequest, setActiveSosRequest] = useState<SupabaseSosRequest | null>(null);
 
   useEffect(() => {
-    // Načti online partnery při mountu
-    getOnlinePartners().then(setRealPartners);
+    // Načti VŠECHNY partnery se sídlem při mountu (ne jen online)
+    getAllPartnersWithLocation().then(setRealPartners);
     // Refresh každých 30s
     const interval = setInterval(() => {
-      getOnlinePartners().then(setRealPartners);
+      getAllPartnersWithLocation().then(setRealPartners);
     }, 30_000);
     return () => clearInterval(interval);
   }, []);
@@ -1113,17 +1179,32 @@ export default function HomePage() {
   }, [selected]);
 
   /* ---- Search results (services matching query) ---- */
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim() || !searchFocused) return [];
+  const searchResults = useMemo((): { mockResults: ServiceProvider[]; dbResults: SupabasePartner[] } => {
+    if (!searchQuery.trim() || !searchFocused) return { mockResults: [], dbResults: [] };
     const q = searchQuery.toLowerCase();
-    return SERVICES.filter(
+
+    // 1. Mock SERVICES
+    const mockResults = SERVICES.filter(
       (s) =>
         s.name.toLowerCase().includes(q) ||
         s.profession.toLowerCase().includes(q) ||
         s.address.toLowerCase().includes(q) ||
         s.description.toLowerCase().includes(q)
-    ).slice(0, 6);
-  }, [searchQuery, searchFocused]);
+    ).slice(0, 4);
+
+    // 2. Reální partneři z DB (konvertujeme na ServiceProvider-like)
+    const dbResults = realPartners.filter(
+      (p) =>
+        p.jmeno.toLowerCase().includes(q) ||
+        (p.firma?.toLowerCase().includes(q) ?? false) ||
+        p.kategorie.toLowerCase().includes(q) ||
+        (p.adresa?.toLowerCase().includes(q) ?? false) ||
+        p.email.toLowerCase().includes(q)
+    ).slice(0, 4);
+
+    // Kombinuj: nejdřív mock, pak DB
+    return { mockResults, dbResults };
+  }, [searchQuery, searchFocused, realPartners]);
 
   /* ---- Fly to service on map ---- */
   const flyToService = useCallback((service: ServiceProvider) => {
@@ -1132,6 +1213,20 @@ export default function HomePage() {
     setTooltipService(service);
     mapRef.current?.flyTo({
       center: [service.lng, service.lat],
+      zoom: 16,
+      pitch: mapConfig.pitch,
+      duration: 1500,
+    });
+  }, [mapConfig.pitch]);
+
+  /* ---- Fly to real DB partner on map ---- */
+  const flyToPartner = useCallback((partner: SupabasePartner) => {
+    if (!partner.lat || !partner.lng) return;
+    setSearchQuery("");
+    setSearchFocused(false);
+    setTooltipService(null);
+    mapRef.current?.flyTo({
+      center: [partner.lng, partner.lat],
       zoom: 16,
       pitch: mapConfig.pitch,
       duration: 1500,
@@ -1295,8 +1390,13 @@ export default function HomePage() {
               />
               {/* Search dropdown */}
               <AnimatePresence>
-                {searchFocused && searchResults.length > 0 && (
-                  <SearchResults results={searchResults} onSelect={flyToService} />
+                {searchFocused && (searchResults.mockResults.length > 0 || searchResults.dbResults.length > 0) && (
+                  <SearchResults
+                    mockResults={searchResults.mockResults}
+                    dbResults={searchResults.dbResults}
+                    onSelectMock={flyToService}
+                    onSelectDb={flyToPartner}
+                  />
                 )}
               </AnimatePresence>
             </div>
@@ -1429,7 +1529,7 @@ export default function HomePage() {
               );
             })}
 
-            {/* Real partners from Supabase DB (zelené piny) */}
+            {/* Real partners from Supabase DB (sídla firem) */}
             {realPartners.map((partner) => {
               if (!partner.lat || !partner.lng) return null;
               // Ikona podle kategorie
@@ -1442,6 +1542,7 @@ export default function HomePage() {
               const PartnerIcon = iconMap[partner.kategorie] || MapPin;
               const isFiltered = selected && partner.kategorie !== selected.id;
               if (isFiltered) return null;
+              const isOnline = partner.is_online;
               return (
                 <Marker
                   key={`real-${partner.id}`}
@@ -1455,15 +1556,30 @@ export default function HomePage() {
                     transition={{ type: "spring", stiffness: 300, damping: 20 }}
                     className="flex flex-col items-center cursor-pointer"
                   >
-                    <div className="flex items-center justify-center w-9 h-9 rounded-full shadow-lg ring-2 ring-emerald-400/50 bg-emerald-500 shadow-emerald-500/40">
+                    <div className={cn(
+                      "flex items-center justify-center w-9 h-9 rounded-full shadow-lg ring-2",
+                      isOnline
+                        ? "ring-emerald-400/50 bg-emerald-500 shadow-emerald-500/40"
+                        : "ring-gray-300/50 bg-gray-400 shadow-gray-400/30"
+                    )}>
                       <PartnerIcon className="w-4 h-4 text-white" strokeWidth={2.2} />
                     </div>
-                    <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-emerald-400/50 -mt-[1px]" />
-                    <div className="mt-0.5 px-1.5 py-0.5 rounded-md bg-emerald-600/90 backdrop-blur-sm">
+                    <div className={cn(
+                      "w-0 h-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent -mt-[1px]",
+                      isOnline ? "border-t-emerald-400/50" : "border-t-gray-300/50"
+                    )} />
+                    <div className={cn(
+                      "mt-0.5 px-1.5 py-0.5 rounded-md backdrop-blur-sm",
+                      isOnline ? "bg-emerald-600/90" : "bg-gray-500/80"
+                    )}>
                       <span className="text-[8px] font-bold text-white whitespace-nowrap">
-                        ● {partner.jmeno}{partner.firma ? ` · ${partner.firma}` : ""}
+                        {isOnline ? "●" : "○"} {partner.jmeno}{partner.firma ? ` · ${partner.firma}` : ""}
                       </span>
                     </div>
+                    <span className={cn(
+                      "text-[7px] font-medium mt-0.5",
+                      isOnline ? "text-emerald-500/70" : "text-gray-400/70"
+                    )}>📍 Sídlo firmy</span>
                   </motion.div>
                 </Marker>
               );

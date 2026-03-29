@@ -61,6 +61,21 @@ export async function getOnlinePartners(): Promise<SupabasePartner[]> {
   return data ?? [];
 }
 
+/** Načte VŠECHNY partnery se sídlem (lat/lng) — pro mapu i vyhledávání */
+export async function getAllPartnersWithLocation(): Promise<SupabasePartner[]> {
+  const { data, error } = await supabase
+    .from("partners")
+    .select("*")
+    .not("lat", "is", null)
+    .not("lng", "is", null);
+
+  if (error) {
+    console.error("Chyba při načítání všech partnerů:", error);
+    return [];
+  }
+  return data ?? [];
+}
+
 /** Odešle SOS request do databáze */
 export async function createSosRequest(params: {
   kategorie: string;
