@@ -1867,10 +1867,14 @@ export default function HomePage() {
                 service={tooltipService}
                 onDetail={() => openServiceDetail(tooltipService)}
                 onClose={() => setTooltipService(null)}
-                onMessage={activeSosRequest ? () => {
+                onMessage={() => {
+                  if (!activeSosRequest) {
+                    alert('Nejprve přivolejte službu tlačítkem SOS, pak můžete psát zprávy.');
+                    return;
+                  }
                   setTooltipService(null);
                   setActivePanel("chat");
-                } : undefined}
+                }}
               />
             )}
           </AnimatePresence>
